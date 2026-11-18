@@ -1,0 +1,101 @@
+
+---
+- name: Initialize reporting window
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    report_window_hours: 24
+
+  tasks:
+    - name: Get current Unix timestamp
+      ansible.builtin.command: date +%s
+      register: report_clock
+      changed_when: false
+
+    - name: Calculate report start time
+      ansible.builtin.set_fact:
+        cutoff_epoch: >-
+          {{
+            (report_clock.stdout | int)
+            - (report_window_hours | int * 3600)
+          }}
+
+- name: Collect recently installed RPM packages
+  hosts: "{{ dynamic_inventory_group }}"
+  gather_facts: false
+  become: true
+  strategy: free
+
+  tasks:
+    - name: Collect packages installed during report window
+      ansible.builtin.shell: |
+        set -o pipefail
+        rpm -qa --qf \
+          '%{NAME}|%{VERSION}-%{RELEASE}.%{ARCH}|%{INSTALLTIME}\n' |
+        awk -F'|' -v cutoff="{{ hostvars['localhost'].cutoff_epoch }}" \
+          '$3 >= cutoff { print $1 "|" $2 }'
+      args:
+        executable: /bin/bash
+      register: recent_rpms
+      changed_when: false
+
+- name: Query Satellite and generate report
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    report_path: /tmp/post_patching_report.csv
+
+  tasks:
+    - name: Query Satellite for outstanding errata
+      redhat.satellite.host_errata_info:
+        server_url: "{{ satellite_url }}"
+        username: "{{ satellite_username }}"
+        password: "{{ satellite_password }}"
+        host: >-
+          {{
+            hostvars[item].satellite_host_name
+            | default(item)
+          }}
+        validate_certs: true
+      loop: "{{ groups[dynamic_inventory_group] }}"
+      loop_control:
+        label: "{{ item }}"
+      register: satellite_results
+      failed_when: false
+      no_log: true
+
+    - name: Initialize Satellite results dictionary
+      ansible.builtin.set_fact:
+        satellite_errata: {}
+
+    - name: Store Satellite errata counts
+      ansible.builtin.set_fact:
+        satellite_errata: >-
+          {{
+            satellite_errata | combine({
+              item.item:
+                (
+                  item.host_errata | length
+                  if (
+                    not (item.failed | default(false))
+                    and item.host_errata is defined
+                  )
+                  else 'Unavailable'
+                )
+            })
+          }}
+      loop: "{{ satellite_results.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Generate CSV report
+      ansible.builtin.template:
+        src: ../templates/post_patching_report.csv.j2
+        dest: "{{ report_path }}"
+        mode: "0600"
+
+    - name: Display report location
+      ansible.builtin.debug:
+        msg: "Report generated at {{ report_path }}"
