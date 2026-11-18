@@ -96,7 +96,14 @@
         src: post_patching_report.csv.j2
         dest: "{{ report_path }}"
         mode: "0600"
+    - name: Read generated report
+      ansible.builtin.slurp:
+        src: /tmp/post_patching_report.csv
+      register: report_content
 
+    - name: Display report in AAP job output
+      ansible.builtin.debug:
+        msg: "{{ report_content.content | b64decode }}"
     - name: Display report location
       ansible.builtin.debug:
         msg: "Report generated at {{ report_path }}"
