@@ -93,7 +93,7 @@
 
     - name: Generate CSV report
       ansible.builtin.template:
-        src: ../templates/post_patching_report.csv.j2
+        src: post_patching_report.csv.j2
         dest: "{{ report_path }}"
         mode: "0600"
 
