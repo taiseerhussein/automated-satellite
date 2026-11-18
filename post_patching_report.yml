@@ -65,7 +65,7 @@
         label: "{{ item }}"
       register: satellite_results
       failed_when: false
-      no_log: true
+      no_log: false
 
     - name: Initialize Satellite results dictionary
       ansible.builtin.set_fact:
