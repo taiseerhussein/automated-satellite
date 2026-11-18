@@ -1,0 +1,11 @@
+
+#jinja2: trim_blocks: True, lstrip_blocks: True
+Hostname,Recent Package Count,Recent Packages,Remaining Installable Errata,Collection Status
+{% for host in groups[dynamic_inventory_group] %}
+{% set h = hostvars[host] %}
+{% set collected = h.recent_rpms is defined and not (h.recent_rpms.failed | default(false)) %}
+{% set packages = h.recent_rpms.stdout_lines | default([]) if collected else [] %}
+{% set remaining = satellite_errata.get(host, 'Unavailable') %}
+{% set status = 'Collected' if collected else 'Unavailable' %}
+"{{ host | replace('"', '""') }}",{{ packages | length }},"{{ (packages | join('; ')) | replace('"', '""') }}","{{ remaining }}","{{ status }}"
+{% endfor %}

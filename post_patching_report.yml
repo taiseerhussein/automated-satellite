@@ -5,6 +5,7 @@
   gather_facts: false
 
   vars:
+    dynamic_inventory_group: rhel_patch_group
     report_window_hours: 24
 
   tasks:
